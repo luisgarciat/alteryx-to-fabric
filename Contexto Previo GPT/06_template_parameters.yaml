@@ -1,0 +1,31 @@
+
+# 06 — Template Parameters (v0.2.0)
+# Propósito: parametrizar notebooks generados por el GPT en Fabric.
+# Cambios v0.2.0: se agrega bloque QA (enabled, threshold_diff, extended) y modo.
+
+modo: "lenient"        # "strict" | "lenient"
+
+lakehouse_name: "LakehouseDemo"
+
+inputs:
+  # Ejemplos (el generador los rellenará):
+  # ventas:
+  #   type: "delta"
+  #   path: "Files/bronze/ventas"
+  # clientes:
+  #   type: "table"
+  #   name: "lakehouse.default.clientes"
+
+output:
+  type: "delta"        # "delta" | "table"
+  path: "Files/silver/output_etl"
+  # name: "lakehouse.default.output_etl"  # usar si type=table
+
+qa:
+  enabled: true
+  threshold_diff: 0.001    # 0.1% para QA_INPUT_OUTPUT_COUNT
+  extended: false          # activa reglas avanzadas si es true
+  required_cols: ["id"]    # columnas clave para not-null
+  date_cols: ["fecha_dt"]  # columnas parseadas con to_date/to_timestamp
+
+order_columns: []          # columnas usadas en orderBy; el generador puede inyectarlas

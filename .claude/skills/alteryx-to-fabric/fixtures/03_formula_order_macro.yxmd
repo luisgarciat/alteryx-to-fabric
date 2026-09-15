@@ -1,0 +1,160 @@
+<?xml version="1.0"?>
+<AlteryxDocument yxmdVer="2023.1">
+  <Nodes>
+    <!-- Cadena 1: Formula -> Sort -> Multi-Row Formula (con Sort explicito: NO debe generar WARN_ORDER_UNDEFINED) -->
+    <Node ToolID="20">
+      <GuiSettings Plugin="AlteryxBasePluginsGui.DbFileInput.DbFileInput">
+        <Position x="54" y="54" />
+      </GuiSettings>
+      <Properties>
+        <Configuration>
+          <File>Files\contactos.csv</File>
+        </Configuration>
+      </Properties>
+      <EngineSettings EngineDll="AlteryxBasePluginsEngine.dll" EngineDllEntryPoint="AlteryxDbFileInput" />
+    </Node>
+    <Node ToolID="21">
+      <GuiSettings Plugin="AlteryxBasePluginsGui.Formula.Formula">
+        <Position x="160" y="54" />
+      </GuiSettings>
+      <Properties>
+        <Configuration>
+          <FormulaFields>
+            <FormulaField expression="REGEX_Replace([email], &quot;@.*$&quot;, &quot;&quot;)" field="email_local" size="254" type="V_String" />
+            <FormulaField expression="DateTimeParse([fecha_str], &quot;%m-%d-%Y&quot;)" field="fecha_dt" size="8" type="Date" />
+          </FormulaFields>
+        </Configuration>
+      </Properties>
+      <EngineSettings EngineDll="AlteryxBasePluginsEngine.dll" EngineDllEntryPoint="AlteryxFormula" />
+    </Node>
+    <Node ToolID="22">
+      <GuiSettings Plugin="AlteryxBasePluginsGui.Sort.Sort">
+        <Position x="260" y="54" />
+      </GuiSettings>
+      <Properties>
+        <Configuration>
+          <SortInfo>
+            <Field field="fecha_dt" order="Ascending" />
+          </SortInfo>
+        </Configuration>
+      </Properties>
+      <EngineSettings EngineDll="AlteryxBasePluginsEngine.dll" EngineDllEntryPoint="AlteryxSort" />
+    </Node>
+    <Node ToolID="23">
+      <GuiSettings Plugin="AlteryxBasePluginsGui.MultiRowFormula.MultiRowFormula">
+        <Position x="360" y="54" />
+      </GuiSettings>
+      <Properties>
+        <Configuration>
+          <Expression>IF [Row-1:fecha_dt]=[fecha_dt] THEN "mismo_dia" ELSE "nuevo_dia" ENDIF</Expression>
+          <UpdateFieldName>marca_dia</UpdateFieldName>
+          <GroupByFields>
+            <Field field="email_local" />
+          </GroupByFields>
+        </Configuration>
+      </Properties>
+      <EngineSettings EngineDll="AlteryxBasePluginsEngine.dll" EngineDllEntryPoint="AlteryxMultiRowFormula" />
+    </Node>
+    <Node ToolID="24">
+      <GuiSettings Plugin="AlteryxBasePluginsGui.DbFileOutput.DbFileOutput">
+        <Position x="460" y="54" />
+      </GuiSettings>
+      <Properties>
+        <Configuration>
+          <File>Tables\lakehouse\output_regex_fecha.delta</File>
+        </Configuration>
+      </Properties>
+      <EngineSettings EngineDll="AlteryxBasePluginsEngine.dll" EngineDllEntryPoint="AlteryxDbFileOutput" />
+    </Node>
+
+    <!-- Cadena 2: Multi-Row Formula SIN Sort aguas arriba: SI debe generar WARN_ORDER_UNDEFINED -->
+    <Node ToolID="30">
+      <GuiSettings Plugin="AlteryxBasePluginsGui.DbFileInput.DbFileInput">
+        <Position x="54" y="200" />
+      </GuiSettings>
+      <Properties>
+        <Configuration>
+          <File>Files\operaciones.csv</File>
+        </Configuration>
+      </Properties>
+      <EngineSettings EngineDll="AlteryxBasePluginsEngine.dll" EngineDllEntryPoint="AlteryxDbFileInput" />
+    </Node>
+    <Node ToolID="31">
+      <GuiSettings Plugin="AlteryxBasePluginsGui.MultiRowFormula.MultiRowFormula">
+        <Position x="160" y="200" />
+      </GuiSettings>
+      <Properties>
+        <Configuration>
+          <Expression>[Row-1:monto]+[monto]</Expression>
+          <UpdateFieldName>acumulado</UpdateFieldName>
+          <GroupByFields />
+        </Configuration>
+      </Properties>
+      <EngineSettings EngineDll="AlteryxBasePluginsEngine.dll" EngineDllEntryPoint="AlteryxMultiRowFormula" />
+    </Node>
+    <Node ToolID="32">
+      <GuiSettings Plugin="AlteryxBasePluginsGui.DbFileOutput.DbFileOutput">
+        <Position x="260" y="200" />
+      </GuiSettings>
+      <Properties>
+        <Configuration>
+          <File>Tables\lakehouse\output_operaciones.delta</File>
+        </Configuration>
+      </Properties>
+      <EngineSettings EngineDll="AlteryxBasePluginsEngine.dll" EngineDllEntryPoint="AlteryxDbFileOutput" />
+    </Node>
+
+    <!-- Cadena 3: referencia a Macro custom -->
+    <Node ToolID="40">
+      <GuiSettings Plugin="AlteryxBasePluginsGui.DbFileInput.DbFileInput">
+        <Position x="54" y="300" />
+      </GuiSettings>
+      <Properties>
+        <Configuration>
+          <File>Files\operaciones_raw.csv</File>
+        </Configuration>
+      </Properties>
+      <EngineSettings EngineDll="AlteryxBasePluginsEngine.dll" EngineDllEntryPoint="AlteryxDbFileInput" />
+    </Node>
+    <Node ToolID="41">
+      <GuiSettings Plugin="AlteryxGuiToolkit.Macro.Macro">
+        <Position x="160" y="300" />
+      </GuiSettings>
+      <Properties>
+        <Configuration>
+          <Value name="Umbral">100</Value>
+        </Configuration>
+      </Properties>
+      <EngineSettings Macro="Macros\limpieza_basica.yxmc" />
+    </Node>
+    <Node ToolID="42">
+      <GuiSettings Plugin="AlteryxBasePluginsGui.DbFileOutput.DbFileOutput">
+        <Position x="260" y="300" />
+      </GuiSettings>
+      <Properties>
+        <Configuration>
+          <File>Tables\lakehouse\output_macro.delta</File>
+        </Configuration>
+      </Properties>
+      <EngineSettings EngineDll="AlteryxBasePluginsEngine.dll" EngineDllEntryPoint="AlteryxDbFileOutput" />
+    </Node>
+  </Nodes>
+  <Connections>
+    <Connection><Origin ToolID="20" Connection="Output" /><Destination ToolID="21" Connection="Input" /></Connection>
+    <Connection><Origin ToolID="21" Connection="Output" /><Destination ToolID="22" Connection="Input" /></Connection>
+    <Connection><Origin ToolID="22" Connection="Output" /><Destination ToolID="23" Connection="Input" /></Connection>
+    <Connection><Origin ToolID="23" Connection="Output" /><Destination ToolID="24" Connection="Input" /></Connection>
+
+    <Connection><Origin ToolID="30" Connection="Output" /><Destination ToolID="31" Connection="Input" /></Connection>
+    <Connection><Origin ToolID="31" Connection="Output" /><Destination ToolID="32" Connection="Input" /></Connection>
+
+    <Connection><Origin ToolID="40" Connection="Output" /><Destination ToolID="41" Connection="Input" /></Connection>
+    <Connection><Origin ToolID="41" Connection="Output" /><Destination ToolID="42" Connection="Input" /></Connection>
+  </Connections>
+  <Properties>
+    <MetaInfo>
+      <Name>ejemplo_formula_orden_macro</Name>
+      <Description>Prueba de WARN_ORDER_UNDEFINED (con y sin Sort) y deteccion de Macro</Description>
+    </MetaInfo>
+  </Properties>
+</AlteryxDocument>

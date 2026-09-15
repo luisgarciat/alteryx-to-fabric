@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://uvm.mx/schemas/modelo_intermedio_alteryx_pyspark.json",
+  "title": "Modelo Intermedio Alteryx → PySpark",
+  "description": "Esquema JSON intermedio que representa la estructura lógica de un flujo de trabajo Alteryx (.yxmd/.yxzp) para su conversión automática a PySpark Notebook en Microsoft Fabric.",
+  "type": "object",
+  "properties": {
+    "workflow": {
+      "type": "object",
+      "description": "Metadatos generales del flujo de trabajo.",
+      "properties": {
+        "name": { "type": "string", "description": "Nombre del flujo de trabajo." },
+        "version": { "type": "string", "description": "Versión de Alteryx Designer o Fabric Runtime asociada." },
+        "description": { "type": "string", "description": "Descripción del flujo o propósito funcional." }
+      },
+      "required": ["name", "version"]
+    },
+    "nodes": {
+      "type": "array",
+      "description": "Listado de herramientas (nodos) incluidas en el flujo.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "description": "Identificador único del nodo (ToolID)." },
+          "type": { "type": "string", "description": "Tipo o nombre de herramienta (ToolName/ToolType)." },
+          "inputs": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "IDs de las herramientas ascendentes que alimentan este nodo."
+          },
+          "outputs": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "IDs de las herramientas descendentes que reciben datos de este nodo."
+          },
+          "params": {
+            "type": "object",
+            "description": "Configuraciones específicas del nodo, extraídas del XML de Alteryx (Configuration_OuterXML).",
+            "additionalProperties": true
+          }
+        },
+        "required": ["id", "type"]
+      }
+    },
+    "connections": {
+      "type": "array",
+      "description": "Lista de conexiones entre herramientas (edges del grafo).",
+      "items": {
+        "type": "object",
+        "properties": {
+          "source_id": { "type": "string", "description": "ToolID origen de la conexión." },
+          "source_anchor": { "type": "string", "description": "Ancla de salida del nodo origen (ej. Left, Right, J, O)." },
+          "destination_id": { "type": "string", "description": "ToolID destino de la conexión." },
+          "destination_anchor": { "type": "string", "description": "Ancla de entrada del nodo destino (ej. Input, 1, 2)." }
+        },
+        "required": ["source_id", "destination_id"]
+      }
+    },
+    "metadata": {
+      "type": "object",
+      "description": "Información adicional para trazabilidad y auditoría.",
+      "properties": {
+        "extracted_at": { "type": "string", "format": "date-time", "description": "Fecha y hora de extracción del XML original." },
+        "parser_version": { "type": "string", "description": "Versión del módulo parser utilizado." },
+        "user": { "type": "string", "description": "Identificador del usuario o sistema que ejecutó la conversión." }
+      }
+    }
+  },
+  "required": ["workflow", "nodes"]
+}

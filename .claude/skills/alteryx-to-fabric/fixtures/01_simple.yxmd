@@ -1,0 +1,90 @@
+<?xml version="1.0"?>
+<AlteryxDocument yxmdVer="2023.1">
+  <Nodes>
+    <Node ToolID="1">
+      <GuiSettings Plugin="AlteryxBasePluginsGui.DbFileInput.DbFileInput">
+        <Position x="54" y="54" />
+      </GuiSettings>
+      <Properties>
+        <Configuration>
+          <File RecordLimit="" SearchSubDirs="False" FileFormat="0">Files\ventas.csv</File>
+          <FormatSpecificOptions>
+            <HeaderRow>True</HeaderRow>
+          </FormatSpecificOptions>
+        </Configuration>
+        <Annotation DisplayMode="0">
+          <AnnotationText />
+        </Annotation>
+      </Properties>
+      <EngineSettings EngineDll="AlteryxBasePluginsEngine.dll" EngineDllEntryPoint="AlteryxDbFileInput" />
+    </Node>
+    <Node ToolID="99">
+      <GuiSettings Plugin="AlteryxBasePluginsGui.Comment.Comment">
+        <Position x="54" y="10" />
+      </GuiSettings>
+      <Properties>
+        <Configuration>
+          <Text>Piloto: flujo simple Input-Select-Output</Text>
+        </Configuration>
+      </Properties>
+    </Node>
+    <Node ToolID="5">
+      <GuiSettings Plugin="AlteryxGuiToolkit.ToolContainer.ToolContainer">
+        <Position x="150" y="40" width="200" height="150" />
+      </GuiSettings>
+      <Properties>
+        <Configuration>
+          <Caption>Limpieza</Caption>
+          <Disabled>False</Disabled>
+        </Configuration>
+      </Properties>
+      <ChildNodes>
+        <Node ToolID="2">
+          <GuiSettings Plugin="AlteryxBasePluginsGui.AlteryxSelect.AlteryxSelect">
+            <Position x="160" y="54" />
+          </GuiSettings>
+          <Properties>
+            <Configuration>
+              <SelectFields>
+                <SelectField field="id" selected="True" rename="" type="Int32" />
+                <SelectField field="nombre" selected="True" rename="nombre_cliente" type="V_String" />
+                <SelectField field="fecha" selected="True" rename="" type="Date" />
+                <SelectField field="comentario_interno" selected="False" rename="" type="V_String" />
+                <SelectField field="*Unknown" selected="True" />
+              </SelectFields>
+              <OrderChanged value="False" />
+            </Configuration>
+          </Properties>
+          <EngineSettings EngineDll="AlteryxBasePluginsEngine.dll" EngineDllEntryPoint="AlteryxSelect" />
+        </Node>
+      </ChildNodes>
+    </Node>
+    <Node ToolID="3">
+      <GuiSettings Plugin="AlteryxBasePluginsGui.DbFileOutput.DbFileOutput">
+        <Position x="260" y="54" />
+      </GuiSettings>
+      <Properties>
+        <Configuration>
+          <File>Tables\lakehouse\output_simple.delta</File>
+        </Configuration>
+      </Properties>
+      <EngineSettings EngineDll="AlteryxBasePluginsEngine.dll" EngineDllEntryPoint="AlteryxDbFileOutput" />
+    </Node>
+  </Nodes>
+  <Connections>
+    <Connection>
+      <Origin ToolID="1" Connection="Output" />
+      <Destination ToolID="2" Connection="Input" />
+    </Connection>
+    <Connection>
+      <Origin ToolID="2" Connection="Output" />
+      <Destination ToolID="3" Connection="Input" />
+    </Connection>
+  </Connections>
+  <Properties>
+    <MetaInfo>
+      <Name>ejemplo_simple</Name>
+      <Description>Flujo simple: Input -&gt; Select -&gt; Output, con Comment y Container cosmeticos</Description>
+    </MetaInfo>
+  </Properties>
+</AlteryxDocument>

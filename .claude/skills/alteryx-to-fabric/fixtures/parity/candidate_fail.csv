@@ -1,0 +1,16 @@
+id,cliente_id,monto,segmento,status
+1,1001,51.69,B,inactivo
+2,1002,53.37,C,activo
+3,1003,55.05,A,inactivo
+4,1004,56.74,B,activo
+5,1005,58.42,C,
+6,1006,60.11,A,activo
+7,1000,61.8,B,inactivo
+8,1001,63.48,C,activo
+9,1002,65.17,A,inactivo
+10,1003,66.85,B,activo
+11,1004,68.53,C,inactivo
+12,1005,70.22,A,activo
+13,1006,71.91,B,inactivo
+14,1000,73.59,C,activo
+15,1001,75.28,A,inactivo

@@ -1,0 +1,400 @@
+{
+  "about": "Ejemplos de referencia del Modelo Intermedio (Alteryx → PySpark). Cada ejemplo es autocontenido y puede validarse contra 01_modelo_intermedio_schema.json a nivel de objeto individual.",
+  "guidelines": [
+    "Usar estos ejemplos para inferir patrones de nodos, conexiones y parámetros mínimos para codegen.",
+    "Los IDs (ToolID) son strings; los tipos (type) reflejan ToolName/ToolType de Alteryx.",
+    "Los params son específicos por herramienta y pueden ampliarse sin romper compatibilidad."
+  ],
+  "examples": {
+    "simple": {
+      "about": "Flujo lineal mínimo: Input → Select → Output.",
+      "workflow": {
+        "name": "ejemplo_simple",
+        "version": "Alteryx_2023.1",
+        "description": "Flujo simple: Input -> Select -> Output"
+      },
+      "nodes": [
+        {
+          "id": "1",
+          "type": "Input Data",
+          "inputs": [],
+          "outputs": [
+            "2"
+          ],
+          "params": {
+            "file_path": "Files/input.csv",
+            "format": "csv"
+          }
+        },
+        {
+          "id": "2",
+          "type": "Select",
+          "inputs": [
+            "1"
+          ],
+          "outputs": [
+            "3"
+          ],
+          "params": {
+            "keep_fields": [
+              "id",
+              "nombre",
+              "fecha"
+            ],
+            "rename": {
+              "nombre": "nombre_cliente"
+            }
+          }
+        },
+        {
+          "id": "3",
+          "type": "Output Data",
+          "inputs": [
+            "2"
+          ],
+          "outputs": [],
+          "params": {
+            "target": "Tables/lakehouse/output_simple",
+            "format": "delta"
+          }
+        }
+      ],
+      "connections": [
+        {
+          "source_id": "1",
+          "source_anchor": "Output",
+          "destination_id": "2",
+          "destination_anchor": "Input"
+        },
+        {
+          "source_id": "2",
+          "source_anchor": "Output",
+          "destination_id": "3",
+          "destination_anchor": "Input"
+        }
+      ],
+      "metadata": {
+        "extracted_at": "2025-10-24T22:41:04Z",
+        "parser_version": "v0.1.0",
+        "user": "Luis"
+      }
+    },
+    "join_summarize": {
+      "about": "Join inner por clave y agregaciones con Summarize (groupBy + agg).",
+      "workflow": {
+        "name": "ejemplo_join_summarize",
+        "version": "Alteryx_2023.1",
+        "description": "Join inner y agregaciones"
+      },
+      "nodes": [
+        {
+          "id": "10",
+          "type": "Input Data",
+          "inputs": [],
+          "outputs": [
+            "12"
+          ],
+          "params": {
+            "file_path": "Files/ventas.csv",
+            "format": "csv"
+          }
+        },
+        {
+          "id": "11",
+          "type": "Input Data",
+          "inputs": [],
+          "outputs": [
+            "12"
+          ],
+          "params": {
+            "file_path": "Files/clientes.csv",
+            "format": "csv"
+          }
+        },
+        {
+          "id": "12",
+          "type": "Join",
+          "inputs": [
+            "10",
+            "11"
+          ],
+          "outputs": [
+            "13"
+          ],
+          "params": {
+            "join_keys": {
+              "left": [
+                "cliente_id"
+              ],
+              "right": [
+                "id"
+              ]
+            },
+            "join_type": "inner"
+          }
+        },
+        {
+          "id": "13",
+          "type": "Summarize",
+          "inputs": [
+            "12"
+          ],
+          "outputs": [
+            "14"
+          ],
+          "params": {
+            "group_by": [
+              "segmento"
+            ],
+            "aggregations": [
+              {
+                "op": "sum",
+                "field": "monto",
+                "as": "monto_total"
+              },
+              {
+                "op": "count",
+                "field": "cliente_id",
+                "as": "clientes"
+              }
+            ]
+          }
+        },
+        {
+          "id": "14",
+          "type": "Output Data",
+          "inputs": [
+            "13"
+          ],
+          "outputs": [],
+          "params": {
+            "target": "Tables/lakehouse/output_join_sum",
+            "format": "delta"
+          }
+        }
+      ],
+      "connections": [
+        {
+          "source_id": "10",
+          "source_anchor": "Output",
+          "destination_id": "12",
+          "destination_anchor": "Left"
+        },
+        {
+          "source_id": "11",
+          "source_anchor": "Output",
+          "destination_id": "12",
+          "destination_anchor": "Right"
+        },
+        {
+          "source_id": "12",
+          "source_anchor": "J",
+          "destination_id": "13",
+          "destination_anchor": "Input"
+        },
+        {
+          "source_id": "13",
+          "source_anchor": "Output",
+          "destination_id": "14",
+          "destination_anchor": "Input"
+        }
+      ],
+      "metadata": {
+        "extracted_at": "2025-10-24T22:41:04Z",
+        "parser_version": "v0.1.0",
+        "user": "Luis"
+      }
+    },
+    "regex_fecha": {
+      "about": "Extracciones con regex y conversión de fecha con formato explícito.",
+      "workflow": {
+        "name": "ejemplo_regex_fecha",
+        "version": "Alteryx_2023.1",
+        "description": "Limpieza con Regex y conversión de fechas"
+      },
+      "nodes": [
+        {
+          "id": "21",
+          "type": "Input Data",
+          "inputs": [],
+          "outputs": [
+            "22"
+          ],
+          "params": {
+            "file_path": "Files/contactos.csv",
+            "format": "csv"
+          }
+        },
+        {
+          "id": "22",
+          "type": "Formula",
+          "inputs": [
+            "21"
+          ],
+          "outputs": [
+            "23"
+          ],
+          "params": {
+            "expressions": [
+              {
+                "as": "email_local",
+                "expr": "regex_extract(email, '^([^@]+)')"
+              },
+              {
+                "as": "dominio",
+                "expr": "regex_extract(email, '@(.+)$')"
+              }
+            ]
+          }
+        },
+        {
+          "id": "23",
+          "type": "Formula",
+          "inputs": [
+            "22"
+          ],
+          "outputs": [
+            "24"
+          ],
+          "params": {
+            "expressions": [
+              {
+                "as": "fecha_dt",
+                "expr": "to_date(fecha_str, 'MM-dd-yyyy')"
+              }
+            ]
+          }
+        },
+        {
+          "id": "24",
+          "type": "Output Data",
+          "inputs": [
+            "23"
+          ],
+          "outputs": [],
+          "params": {
+            "target": "Tables/lakehouse/output_regex_fecha",
+            "format": "delta"
+          }
+        }
+      ],
+      "connections": [
+        {
+          "source_id": "21",
+          "source_anchor": "Output",
+          "destination_id": "22",
+          "destination_anchor": "Input"
+        },
+        {
+          "source_id": "22",
+          "source_anchor": "Output",
+          "destination_id": "23",
+          "destination_anchor": "Input"
+        },
+        {
+          "source_id": "23",
+          "source_anchor": "Output",
+          "destination_id": "24",
+          "destination_anchor": "Input"
+        }
+      ],
+      "metadata": {
+        "extracted_at": "2025-10-24T22:41:04Z",
+        "parser_version": "v0.1.0",
+        "user": "Luis"
+      }
+    },
+    "macro": {
+      "about": "Referencia a Macro (.yxmc); se conserva ruta para resolver dependencia.",
+      "workflow": {
+        "name": "ejemplo_macro",
+        "version": "Alteryx_2023.1",
+        "description": "Uso de Macro referenciada desde el flujo"
+      },
+      "nodes": [
+        {
+          "id": "31",
+          "type": "Input Data",
+          "inputs": [],
+          "outputs": [
+            "33"
+          ],
+          "params": {
+            "file_path": "Files/operaciones.csv",
+            "format": "csv"
+          }
+        },
+        {
+          "id": "33",
+          "type": "Select",
+          "inputs": [
+            "31"
+          ],
+          "outputs": [
+            "32"
+          ],
+          "params": {
+            "keep_fields": [
+              "op_id",
+              "status",
+              "monto"
+            ]
+          }
+        },
+        {
+          "id": "32",
+          "type": "Macro",
+          "inputs": [
+            "33"
+          ],
+          "outputs": [
+            "34"
+          ],
+          "params": {
+            "macro_path": "Macros/limpieza_basica.yxmc",
+            "engine_settings": {
+              "Macro": "Macros/limpieza_basica.yxmc"
+            }
+          }
+        },
+        {
+          "id": "34",
+          "type": "Output Data",
+          "inputs": [
+            "32"
+          ],
+          "outputs": [],
+          "params": {
+            "target": "Tables/lakehouse/output_macro",
+            "format": "delta"
+          }
+        }
+      ],
+      "connections": [
+        {
+          "source_id": "31",
+          "source_anchor": "Output",
+          "destination_id": "33",
+          "destination_anchor": "Input"
+        },
+        {
+          "source_id": "33",
+          "source_anchor": "Output",
+          "destination_id": "32",
+          "destination_anchor": "Input"
+        },
+        {
+          "source_id": "32",
+          "source_anchor": "Output",
+          "destination_id": "34",
+          "destination_anchor": "Input"
+        }
+      ],
+      "metadata": {
+        "extracted_at": "2025-10-24T22:41:04Z",
+        "parser_version": "v0.1.0",
+        "user": "Luis"
+      }
+    }
+  }
+}
