@@ -20,11 +20,22 @@ PySpark en Microsoft Fabric.
    paridad), lee su
    [`SKILL.md`](.claude/skills/alteryx-to-fabric/SKILL.md).
 
+### Si tu Claude Code no muestra el skill solo
+
+Algunas interfaces (ej. Cowork) solo reconocen skills instaladas a nivel de
+cuenta, no skills de carpeta de proyecto como este — aunque tengas el repo
+clonado y abierto, no se activa solo. Para esos casos, instala
+[`account-skill/alteryx-to-fabric.skill`](account-skill/alteryx-to-fabric.skill)
+en tu cuenta (ver el README de esa carpeta) — es un loader delgado que jala
+este mismo repo y sigue su `SKILL.md` real en cada uso, así que se mantiene
+igual de actualizado.
+
 ## Estructura del repositorio
 
 ```
 .
-├── .claude/skills/alteryx-to-fabric/   # el skill en si (ver su propio README/SKILL.md)
+├── .claude/skills/alteryx-to-fabric/   # el skill de proyecto (ver su propio README/SKILL.md)
+├── account-skill/                      # version empaquetada para instalar a nivel de cuenta
 └── Contexto Previo GPT/                # material fuente original (GPT de migracion v0.2.0)
     y Promt GPT.docx                    # del que se porto la metodologia a este skill
 ```

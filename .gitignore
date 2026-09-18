@@ -9,3 +9,7 @@ ir_output/
 # Workflows reales de prueba y sus salidas -- pueden contener datos/rutas
 # internas de la empresa, no van a un repo compartido.
 /samples/
+
+# Material de construccion del skill-creator (evals, workspace de benchmark) --
+# no es parte del skill en si, solo se usa para armar/probar account-skill/.
+/_skillbuild/
