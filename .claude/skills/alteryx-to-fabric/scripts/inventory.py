@@ -65,7 +65,7 @@ PLUGIN_ALIASES = {
 }
 
 # Herramientas que no producen datos y no requieren traducción a PySpark.
-COSMETIC_TOOLS = {"__container__", "Comment", "TextBox", "ExplorerBox", "Browse"}
+COSMETIC_TOOLS = {"__container__", "Comment", "TextBox", "ExplorerBox", "Browse", "BrowseV2"}
 
 
 def basename(p: str) -> str:

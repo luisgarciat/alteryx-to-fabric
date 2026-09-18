@@ -139,6 +139,12 @@ class IfExpr:
     else_expr: object | None
 
 
+@dataclass
+class InExpr:
+    value: object
+    items: list
+
+
 # --------------------------------------------------------------------------
 # Parser (descendente recursivo, precedencia estilo Alteryx/SQL)
 #   OR > AND > NOT > comparacion > + - > * / % > unario > primario
@@ -201,6 +207,17 @@ class Parser:
 
     def parse_comparison(self):
         left = self.parse_additive()
+        if self.at_keyword("IN"):
+            self.advance()
+            self.expect("LPAREN")
+            items = []
+            if self.peek().type != "RPAREN":
+                items.append(self.parse_or())
+                while self.peek().type == "COMMA":
+                    self.advance()
+                    items.append(self.parse_or())
+            self.expect("RPAREN")
+            return InExpr(left, items)
         if self.peek().type in _COMPARISON_TYPES:
             op = self.advance().type
             right = self.parse_additive()
@@ -249,9 +266,6 @@ class Parser:
             return node
         if t.type == "IDENT":
             upper = t.value.upper()
-            if upper == "NULL":
-                self.advance()
-                return NullLit()
             if upper == "IF":
                 return self.parse_if()
             self.advance()
@@ -265,6 +279,10 @@ class Parser:
                         args.append(self.parse_or())
                 self.expect("RPAREN")
                 return Call(t.value, args)
+            if upper == "NULL":
+                # Alteryx normalmente invoca Null() como funcion (con parentesis);
+                # el caso sin parentesis se soporta igual como literal de respaldo.
+                return NullLit()
             return Call(t.value, [])
         raise ParseError(f"Token inesperado: {t!r}")
 
@@ -373,8 +391,11 @@ class Codegen:
         return "F.lit(None)"
 
     def gen_Field(self, node: Field) -> str:
+        # Un nombre de campo con '.' se interpreta como acceso a struct anidado
+        # en F.col()/F.lag()/F.lead() a menos que se delimite con backticks.
+        name = f"`{node.name}`" if "." in node.name else node.name
         if node.row_offset == 0:
-            return f"F.col({node.name!r})"
+            return f"F.col({name!r})"
         if self.window_var is None:
             self.warn(
                 "WARN_ROW_REF_WITHOUT_WINDOW",
@@ -383,7 +404,15 @@ class Codegen:
             )
             return "F.lit(None)"
         fn = "F.lag" if node.row_offset < 0 else "F.lead"
-        return f"{fn}({node.name!r}, {abs(node.row_offset)}).over({self.window_var})"
+        return f"{fn}({name!r}, {abs(node.row_offset)}).over({self.window_var})"
+
+    def gen_InExpr(self, node: InExpr) -> str:
+        all_literal = all(isinstance(it, (Num, Str)) for it in node.items)
+        if all_literal:
+            vals = [str(int(it.value) if it.is_int else it.value) if isinstance(it, Num) else repr(it.value) for it in node.items]
+            return f"({self.gen(node.value)}).isin({', '.join(vals)})"
+        self.warn("WARN_NON_LITERAL_ARG", "IN con elementos no literales; se genero como cadena de comparaciones OR.")
+        return "(" + " | ".join(f"(({self.gen(node.value)}) == ({self.gen(it)}))" for it in node.items) + ")"
 
     def gen_UnaryOp(self, node: UnaryOp) -> str:
         inner = self.gen(node.operand)
@@ -492,17 +521,26 @@ def _h_replace(cg: Codegen, args):
     return f"F.regexp_replace({cg.gen(args[0])}, {cg.gen(args[1])}, {cg.gen(args[2])})"
 
 
+_DATEADD_SECONDS = {
+    "second": 1, "seconds": 1, "minute": 60, "minutes": 60, "hour": 3600, "hours": 3600,
+}
+
+
 def _h_datetimeadd(cg: Codegen, args):
     fecha, n, unidad = args[0], args[1], args[2]
     unit = unidad.value.lower() if isinstance(unidad, Str) else None
-    if unit == "days":
+    if unit in ("day", "days"):
         return f"F.date_add({cg.gen(fecha)}, {cg.gen(n)})"
-    if unit == "months":
+    if unit in ("month", "months"):
         return f"F.add_months({cg.gen(fecha)}, {cg.gen(n)})"
-    if unit == "years":
+    if unit in ("year", "years"):
         n_code = f"{int(n.value) * 12}" if isinstance(n, Num) else f"({cg.gen(n)}) * 12"
         return f"F.add_months({cg.gen(fecha)}, {n_code})"
-    cg.warn("WARN_UNSUPPORTED_DATE_UNIT", "Unidad de DateTimeAdd no reconocida (se esperaba days/months/years literal).")
+    if unit in _DATEADD_SECONDS:
+        # Sin funcion generica de "sumar N segundos" en Spark: castear a epoch,
+        # sumar, castear de vuelta a timestamp.
+        return f"(({cg.gen(fecha)}).cast('long') + ({cg.gen(n)}) * {_DATEADD_SECONDS[unit]}).cast('timestamp')"
+    cg.warn("WARN_UNSUPPORTED_DATE_UNIT", f"Unidad de DateTimeAdd no reconocida: {unidad!r} (se esperaba days/months/years/hours/minutes/seconds literal).")
     return f"F.date_add({cg.gen(fecha)}, {cg.gen(n)})"
 
 
@@ -569,6 +607,14 @@ _FUNCTION_HANDLERS = {
     "datetimediff": _h_datetimediff,
     "datetimeparse": _h_date_fmt("F.to_date"),
     "datetimeformat": _h_date_fmt("F.date_format"),
+    "datetimeyear": lambda cg, a: f"F.year({cg.gen(a[0])})",
+    "datetimemonth": lambda cg, a: f"F.month({cg.gen(a[0])})",
+    "datetimeday": lambda cg, a: f"F.dayofmonth({cg.gen(a[0])})",
+    "datetimehour": lambda cg, a: f"F.hour({cg.gen(a[0])})",
+    "datetimeminute": lambda cg, a: f"F.minute({cg.gen(a[0])})",
+    "datetimesecond": lambda cg, a: f"F.second({cg.gen(a[0])})",
+    "isempty": lambda cg, a: f"({cg.gen(a[0])}) == F.lit('')",
+    "null": lambda cg, a: "F.lit(None)",
     "true": lambda cg, a: "F.lit(True)",
     "false": lambda cg, a: "F.lit(False)",
 }

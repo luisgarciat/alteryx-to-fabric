@@ -5,3 +5,7 @@ __pycache__/
 *.transpiled.json
 ir_output/
 *.ipynb_checkpoints/
+
+# Workflows reales de prueba y sus salidas -- pueden contener datos/rutas
+# internas de la empresa, no van a un repo compartido.
+/samples/

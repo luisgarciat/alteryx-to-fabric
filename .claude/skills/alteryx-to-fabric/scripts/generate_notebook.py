@@ -33,8 +33,11 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
+
+from formula_transpiler import translate_date_format
 
 # --------------------------------------------------------------------------
 # SETUP: funciones reutilizables embebidas en el notebook generado.
@@ -228,10 +231,16 @@ def cg_input_data(node: dict, ctx: GenContext, **_) -> tuple[list[str], str]:
     fmt, path = p.get("format", "unknown"), p.get("file_path", "")
     if fmt == "csv":
         return [f"{var} = read_csv_path({path!r})"], var
-    if fmt in ("delta", "yxdb"):
+    if fmt == "delta":
         return [f"{var} = read_delta_path({path!r})"], var
-    ctx.warn(node, "WARN_UNSUPPORTED_INPUT_FORMAT", f"Formato de entrada {fmt!r} sin lector automatico ({path!r}).")
-    return [f"{var} = read_csv_path({path!r})  # TODO: formato {fmt!r} no confirmado, se asumio csv"], var
+    if fmt == "excel":
+        ctx.warn(node, "WARN_UNSUPPORTED_INPUT_FORMAT", f"Excel sin lector nativo de Spark ({path!r}).", blocking=True)
+        return [f"{var} = None  # TODO: leer Excel a mano -- pandas.read_excel({path!r}) + spark.createDataFrame(...) (ver references/tool_mapping.md)"], var
+    if fmt == "yxdb":
+        ctx.warn(node, "WARN_UNSUPPORTED_INPUT_FORMAT", f"'.yxdb' es formato binario propietario de Alteryx, sin lector en Spark ({path!r}).", blocking=True)
+        return [f"{var} = None  # TODO: '{path}' es .yxdb -- exportar desde Alteryx a Parquet/CSV/Delta antes de poder leerlo aqui"], var
+    ctx.warn(node, "WARN_UNSUPPORTED_INPUT_FORMAT", f"Formato de entrada {fmt!r} no reconocido ({path!r}).", blocking=True)
+    return [f"{var} = None  # TODO: formato {fmt!r} no reconocido (ToolID={node['id']}), revisar manualmente"], var
 
 
 def cg_select(node: dict, ctx: GenContext, ir: dict, nodes_by_id: dict) -> tuple[list[str], str]:
@@ -438,6 +447,81 @@ def cg_sort(node: dict, ctx: GenContext, ir: dict, nodes_by_id: dict) -> tuple[l
     return [f"{var} = {upstream}.orderBy({order_code})"], var
 
 
+def cg_unique(node: dict, ctx: GenContext, ir: dict, nodes_by_id: dict) -> tuple[list[str], str]:
+    var = f"df_{node['id']}"
+    upstream = first_upstream_var(ir, nodes_by_id, node["id"]) or "None"
+    raw = node["params"].get("_raw", {}) or {}
+    fields = (raw.get("UniqueFields") or {}).get("Field", [])
+    if isinstance(fields, dict):
+        fields = [fields]
+    cols = [f.get("@field") for f in fields if f.get("@field")]
+    if not cols:
+        ctx.warn(node, "WARN_UNSUPPORTED_EXPRESSION", "Unique sin columnas resueltas en _raw.UniqueFields.", blocking=True)
+        return [f"{var} = {upstream}  # TODO: Unique ToolID={node['id']} sin columnas resueltas"], var
+    return [f"{var} = {upstream}.dropDuplicates({cols!r})"], var
+
+
+def cg_text_to_columns(node: dict, ctx: GenContext, ir: dict, nodes_by_id: dict) -> tuple[list[str], str]:
+    var = f"df_{node['id']}"
+    upstream = first_upstream_var(ir, nodes_by_id, node["id"]) or "None"
+    raw = node["params"].get("_raw", {}) or {}
+    field = raw.get("Field")
+    root_name = raw.get("RootName") or field
+    delims = (raw.get("Delimeters") or {}).get("@value", "")
+    try:
+        num_fields = int((raw.get("NumFields") or {}).get("@value"))
+    except (TypeError, ValueError):
+        num_fields = None
+    error_handling = raw.get("ErrorHandling", "")
+
+    if not field or not num_fields:
+        ctx.warn(node, "WARN_UNSUPPORTED_EXPRESSION", "Text To Columns sin config resuelta en _raw.", blocking=True)
+        return [f"{var} = {upstream}  # TODO: Text To Columns ToolID={node['id']} sin config resuelta"], var
+    if error_handling and error_handling != "Last":
+        ctx.warn(
+            node, "WARN_UNSUPPORTED_EXPRESSION",
+            f"Text To Columns con ErrorHandling={error_handling!r} no verificado contra un caso real "
+            "(se genero como si fuera 'Last': el remanente queda en el ultimo campo).",
+        )
+
+    pattern = "[" + re.escape(delims) + "]" if delims else ","
+    tmp = f"_split_{node['id']}"
+    lines = [f"{var} = {upstream}.withColumn({tmp!r}, F.split(F.col({field!r}), {pattern!r}, {num_fields}))"]
+    for i in range(num_fields):
+        lines.append(f"{var} = {var}.withColumn({f'{root_name}{i + 1}'!r}, F.col({tmp!r}).getItem({i}))")
+    lines.append(f"{var} = {var}.drop({tmp!r})")
+    return lines, var
+
+
+def cg_datetime_tool(node: dict, ctx: GenContext, ir: dict, nodes_by_id: dict) -> tuple[list[str], str]:
+    """Herramienta dedicada 'DateTime' (distinta de las funciones DateTimeParse/
+    DateTimeFormat de Formula). Usa formato bare java.time (`yyyy-MM-dd`), NO
+    strftime -- confirmado contra un caso real; translate_date_format() es un
+    no-op sobre ese formato asi que aplicarla de todas formas no hace dano."""
+    var = f"df_{node['id']}"
+    upstream = first_upstream_var(ir, nodes_by_id, node["id"]) or "None"
+    raw = node["params"].get("_raw", {}) or {}
+    in_field, out_field, fmt = raw.get("InputFieldName"), raw.get("OutputFieldName"), raw.get("Format")
+    is_from = (raw.get("IsFrom") or {}).get("@value") == "True"
+
+    if not (in_field and out_field and fmt):
+        ctx.warn(node, "WARN_UNSUPPORTED_EXPRESSION", "DateTime (herramienta) sin config resuelta en _raw.", blocking=True)
+        return [f"{var} = {upstream}  # TODO: DateTime ToolID={node['id']} sin config resuelta"], var
+
+    spark_fmt, unknown = translate_date_format(fmt)
+    if unknown:
+        ctx.warn(node, "WARN_UNSUPPORTED_DATE_TOKEN", f"Token(s) sin mapeo conocido {unknown} en formato {fmt!r}.")
+
+    if is_from:
+        expr = f"F.date_format(F.col({in_field!r}), {spark_fmt!r})"
+    else:
+        has_time = any(tok in fmt for tok in ("H", "h", ":", "s", "S"))
+        fn = "F.to_timestamp" if has_time else "F.to_date"
+        expr = f"{fn}(F.col({in_field!r}), {spark_fmt!r})"
+
+    return [f"{var} = {upstream}.withColumn({out_field!r}, {expr})"], var
+
+
 def cg_output_data(node: dict, ctx: GenContext, ir: dict, nodes_by_id: dict) -> tuple[list[str], None]:
     upstream = first_upstream_var(ir, nodes_by_id, node["id"]) or "None"
     p = node["params"]
@@ -468,6 +552,9 @@ TRANSFORM_HANDLERS = {
     "Union": cg_union,
     "Summarize": cg_summarize,
     "Sort": cg_sort,
+    "Unique": cg_unique,
+    "Text To Columns": cg_text_to_columns,
+    "DateTime": cg_datetime_tool,
 }
 
 

@@ -120,10 +120,91 @@ def extract_select(cfg: ET.Element | None) -> dict:
     return out
 
 
+def _quote_operand(value: str) -> str:
+    """Un operando de Filter modo Simple llega siempre como texto en el XML.
+    Si parece numero, se emite sin comillas (para que el transpilador lo trate
+    como numero); si no, como literal de texto Formula."""
+    try:
+        int(value)
+        return value
+    except ValueError:
+        pass
+    try:
+        float(value)
+        return value
+    except ValueError:
+        pass
+    return '"' + value.replace('"', '""') + '"'
+
+
+_SIMPLE_FILTER_OPERATORS = {
+    "=": "{f} = {v}", "==": "{f} = {v}", "<>": "{f} <> {v}", "!=": "{f} <> {v}",
+    "<": "{f} < {v}", "<=": "{f} <= {v}", ">": "{f} > {v}", ">=": "{f} >= {v}",
+    "Contains": "Contains({f}, {v})", "NotContains": "NOT Contains({f}, {v})",
+    "StartsWith": "StartsWith({f}, {v})", "DoesNotStartWith": "NOT StartsWith({f}, {v})",
+    "EndsWith": "EndsWith({f}, {v})", "DoesNotEndWith": "NOT EndsWith({f}, {v})",
+    "IsNull": "ISNULL({f})", "IsNotNull": "NOT ISNULL({f})",
+    "IsEmpty": "IsEmpty({f})", "IsNotEmpty": "NOT IsEmpty({f})",
+}
+
+# DateType -> desplazamiento en dias respecto de hoy. Cubre lo confirmado
+# contra workflows reales; cualquier otro valor (lastWeek, thisMonth, etc.)
+# se deja sin sintetizar a proposito -- ver el 'else' en _simple_filter_expression.
+_RELATIVE_DATE_TYPES = {"yesterday": -1, "tomorrow": 1}
+
+
+def _simple_filter_expression(field: str, operator: str, operands: ET.Element | None) -> str:
+    """Sintetiza una expresion Formula-language equivalente al filtro 'Simple'
+    de Alteryx, para reutilizar el transpilador existente (Fase 3) en vez de
+    duplicar logica de codegen. Devuelve '' si no se puede sintetizar con
+    confianza (queda para revision manual, ver WARN_UNSUPPORTED_EXPRESSION)."""
+    f = f"[{field}]"
+    date_type = text_of(operands.find("DateType")) if operands is not None else ""
+    operand_raw = text_of(operands.find("Operand")) if operands is not None else ""
+
+    if date_type == "today":
+        period_count = text_of(operands.find("PeriodCount")) or "0"
+        period_type = text_of(operands.find("PeriodType")) or "days"
+        try:
+            n = int(period_count)
+        except ValueError:
+            n = 0
+        value = "DateTimeToday()" if n == 0 else f"DateTimeAdd(DateTimeToday(), {n}, \"{period_type}\")"
+    elif date_type in _RELATIVE_DATE_TYPES:
+        value = f"DateTimeAdd(DateTimeToday(), {_RELATIVE_DATE_TYPES[date_type]}, \"days\")"
+    elif date_type in ("", "fixed"):
+        # 'fixed' o sin DateType: el Operand ya es el valor final a comparar.
+        value = _quote_operand(operand_raw) if operand_raw else None
+    else:
+        # Otros DateType (relativos a semana/mes/etc.) no se sintetizan con
+        # confianza todavia -- mejor dejarlo vacio que adivinar mal.
+        return ""
+
+    if operator in ("IsNull", "IsNotNull", "IsEmpty", "IsNotEmpty"):
+        template = _SIMPLE_FILTER_OPERATORS[operator]
+        return template.format(f=f)
+
+    template = _SIMPLE_FILTER_OPERATORS.get(operator)
+    if not template or value is None:
+        return ""
+    return template.format(f=f, v=value)
+
+
 def extract_filter(cfg: ET.Element | None) -> dict:
     if cfg is None:
         return {}
-    return {"expression": text_of(cfg.find("Expression")), "mode": text_of(cfg.find("Mode")) or "Custom"}
+    mode = text_of(cfg.find("Mode")) or "Custom"
+    if mode != "Simple":
+        return {"expression": text_of(cfg.find("Expression")), "mode": mode}
+
+    simple = cfg.find("Simple")
+    if simple is None:
+        return {"expression": "", "mode": mode}
+    field = text_of(simple.find("Field"))
+    operator = text_of(simple.find("Operator"))
+    operands = simple.find("Operands")
+    expression = _simple_filter_expression(field, operator, operands) if field and operator else ""
+    return {"expression": expression, "mode": mode, "simple_filter": {"field": field, "operator": operator}}
 
 
 def extract_formula(cfg: ET.Element | None) -> dict:
@@ -221,10 +302,22 @@ def build_params(tool_type: str, node_el: ET.Element, extra: dict | None = None)
 # --------------------------------------------------------------------------
 
 
-def collect_nodes(nodes_el: ET.Element, out: dict[str, dict]) -> None:
+def _is_disabled(node_el: ET.Element) -> bool:
+    """Un Tool Container (o, con el mismo mecanismo, cualquier nodo) puede
+    estar deshabilitado en el Designer (<Disabled value="True"/> en su
+    Configuration). Alteryx no lo ejecuta en produccion -- si lo tradujeramos
+    igual, generariamos codigo para logica que en realidad esta apagada."""
+    props = node_el.find("Properties")
+    cfg = props.find("Configuration") if props is not None else None
+    disabled = cfg.find("Disabled") if cfg is not None else None
+    return disabled is not None and disabled.get("value", "").lower() == "true"
+
+
+def collect_nodes(nodes_el: ET.Element, out: dict[str, dict], disabled_ids: list[str]) -> None:
     """Recorre <Nodes>, entra en <ChildNodes> de los contenedores (que no se
     emiten como nodos propios: solo agrupan visualmente) y descarta el resto
-    de herramientas cosméticas."""
+    de herramientas cosméticas. Si un contenedor esta deshabilitado, ni el
+    contenedor ni nada dentro de el se traduce (Alteryx tampoco lo corre)."""
     for node_el in nodes_el.findall("Node"):
         tool_id = node_el.get("ToolID", "")
         gui = node_el.find("GuiSettings")
@@ -233,15 +326,18 @@ def collect_nodes(nodes_el: ET.Element, out: dict[str, dict]) -> None:
         macro = engine.get("Macro", "") if engine is not None else ""
 
         tool_type = "Macro" if macro else normalize_plugin(plugin)
+        disabled = _is_disabled(node_el)
+        if disabled:
+            disabled_ids.append(tool_id)
 
-        if tool_type not in COSMETIC_TOOLS:
+        if tool_type not in COSMETIC_TOOLS and not disabled:
             extra = {"macro_path": macro} if macro else None
             params = build_params(tool_type, node_el, extra=extra)
             out[tool_id] = {"id": tool_id, "type": tool_type, "inputs": [], "outputs": [], "params": params}
 
         child = node_el.find("ChildNodes")
-        if child is not None:
-            collect_nodes(child, out)
+        if child is not None and not disabled:
+            collect_nodes(child, out, disabled_ids)
 
 
 def append_unique(lst: list[str], val: str) -> None:
@@ -315,9 +411,10 @@ def parse_workflow_to_ir(label: str, raw: bytes, user: str) -> dict:
     name = Path(label.split("!")[0]).stem
 
     nodes: dict[str, dict] = {}
+    disabled_ids: list[str] = []
     nodes_el = root.find("Nodes")
     if nodes_el is not None:
-        collect_nodes(nodes_el, nodes)
+        collect_nodes(nodes_el, nodes, disabled_ids)
 
     connections = collect_connections(root, set(nodes.keys()))
     for c in connections:
@@ -339,6 +436,7 @@ def parse_workflow_to_ir(label: str, raw: bytes, user: str) -> dict:
             "parser_version": PARSER_VERSION,
             "user": user,
             "warnings": warnings,
+            "disabled_tool_ids": disabled_ids,
         },
     }
 
@@ -426,6 +524,9 @@ def main() -> int:
     for w in ir["metadata"]["warnings"]:
         print(f"[{w['code']}] {w['message']}")
         total_warnings += 1
+    disabled = ir["metadata"]["disabled_tool_ids"]
+    if disabled:
+        print(f"[INFO] {len(disabled)} nodo(s) excluidos por estar deshabilitados en Alteryx: ToolID={disabled}")
     print(f"OK  {len(ir['nodes'])} nodos, {len(ir['connections'])} conexiones -> {out_path} ({total_warnings} advertencias)")
     return 0
 

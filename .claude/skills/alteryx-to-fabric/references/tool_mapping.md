@@ -72,7 +72,9 @@ tabla (para que se cuente bien) y luego a este archivo.
 
 ## Cosméticas (se ignoran)
 
-`Comment`, `TextBox`, `ExplorerBox`, `Browse`, contenedores (`ToolContainer`).
+`Comment`, `TextBox`, `ExplorerBox`, `Browse`, `BrowseV2` (el reemplazo moderno
+de `Browse` — visto en workflows reales de Alteryx 2023.1, agregado tras
+probar la skill contra un flujo de producción), contenedores (`ToolContainer`).
 No generan código; el inventario ya las excluye de las métricas de complejidad.
 
 ## Nota de compatibilidad — forma del modelo intermedio
