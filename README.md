@@ -15,9 +15,9 @@ PySpark en Microsoft Fabric.
    y Claude Code lo carga automáticamente — no hay que instalar ni invocar
    nada a mano. Basta con preguntar de forma natural sobre Alteryx, un
    `.yxmd`, o migrar un flujo a Fabric/Lakehouse.
-4. Para ver qué hace el skill y cómo están organizadas sus 5 fases
+4. Para ver qué hace el skill y cómo están organizadas sus 6 fases
    (inventario, parser, transpilador Formula, generación de notebook, QA de
-   paridad), lee su
+   paridad, reporte de caso), lee su
    [`SKILL.md`](.claude/skills/alteryx-to-fabric/SKILL.md).
 
 ### Si tu Claude Code no muestra el skill solo
@@ -36,9 +36,15 @@ igual de actualizado.
 .
 ├── .claude/skills/alteryx-to-fabric/   # el skill de proyecto (ver su propio README/SKILL.md)
 ├── account-skill/                      # version empaquetada para instalar a nivel de cuenta
+├── cases/                              # reportes de migraciones reales (Fase 6) -- retro para mejorar la skill
 └── Contexto Previo GPT/                # material fuente original (GPT de migracion v0.2.0)
     y Promt GPT.docx                    # del que se porto la metodologia a este skill
 ```
+
+`cases/` es la evidencia real detrás de cada mejora a la skill — ver su
+propio [README](cases/README.md). Como puede tener detalles reales del
+negocio, revisa cada reporte antes de subirlo si el repo llegara a hacerse
+público de nuevo.
 
 La carpeta `Contexto Previo GPT/` es el material original de un asistente
 GPT de migración previo — se conserva como referencia histórica porque

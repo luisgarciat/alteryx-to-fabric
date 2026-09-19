@@ -1,0 +1,12 @@
+{
+  "fecha": "2026-09-18",
+  "usuario": "ejemplo",
+  "workflow": "02_join_summarize.yxmd (fixture sintetico, no un caso real)",
+  "modo": "lenient",
+  "nodos_totales": 5,
+  "nodos_con_generador": 5,
+  "todos_pendientes": 0,
+  "warnings_por_codigo": {"DECISION_JOIN_MODE_INFERRED": 1},
+  "herramientas_sin_soporte": [],
+  "resultado": "notebook generado sin bloqueos; unico aviso fue la inferencia automatica del tipo de Join (inner)"
+}

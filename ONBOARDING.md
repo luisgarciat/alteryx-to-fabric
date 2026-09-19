@@ -45,8 +45,9 @@ son la base de todo lo demás.
 5. Sin comandos especiales — pídele a Claude lo que necesites, por ejemplo:
    > "Tengo este archivo ventas.yxmd, ayúdame a migrarlo a Fabric"
 
-   El skill sigue 5 fases (inventario → parser → transpilador de
-   expresiones → generación de notebook → validación de paridad) y decide
+   El skill sigue 6 fases (inventario → parser → transpilador de
+   expresiones → generación de notebook → validación de paridad → reporte
+   de caso en `cases/`, para retroalimentar mejoras) y decide
    solo en cuál entrar según lo que le pidas.
 
 ## E) Opcional — modo "de proyecto" en Claude Code

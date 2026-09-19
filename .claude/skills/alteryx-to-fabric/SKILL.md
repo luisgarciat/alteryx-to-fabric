@@ -183,6 +183,53 @@ Ver `references/parity.md` para la definición completa de cada métrica, las
 tolerancias, y por qué no hay que mezclar estadísticas calculadas con Spark
 y calculadas en Python puro en la misma comparación.
 
+### Fase 6 — Reporte de caso (retroalimentación para mejora continua)
+
+Al terminar una migración (tras la Fase 4, o la 5 si corriste paridad), o en
+cualquier momento en que el usuario confirme éxito o cuente cómo resolvió
+algo ("ya funcionó", "esto lo resolví así"), guarda un reporte del caso. No
+es un extra opcional: es lo que le permite al equipo mejorar la skill con
+evidencia real de workflows reales — así se encontraron y arreglaron todos
+los bugs reales que tiene hoy (el operador `IN`, `Null()` como función,
+contenedores deshabilitados, Filter modo Simple, etc.), no adivinando.
+
+Crea `cases/<AAAA-MM-DD>_<nombre-del-workflow>/` con dos archivos:
+
+**`reporte.json`** — mismo shape siempre, para poder comparar entre casos.
+Los números salen del payload de LOGGING que ya genera `generate_notebook.py`
+(`todos_pendientes`, `warnings_por_codigo`) — cópialos de ahí, no los inventes:
+
+```json
+{
+  "fecha": "AAAA-MM-DD",
+  "usuario": "...",
+  "workflow": "nombre.yxmd",
+  "modo": "strict|lenient",
+  "nodos_totales": 0,
+  "nodos_con_generador": 0,
+  "todos_pendientes": 0,
+  "warnings_por_codigo": {"CODIGO": 0},
+  "herramientas_sin_soporte": [],
+  "resultado": "ruta del notebook generado, o 'bloqueado' y por que"
+}
+```
+
+**`REPORTE.md`** — lo mismo en prosa: qué se migró, qué costó trabajo, cómo
+se resolvió (o qué falta), y una sección "Sugerencia para la skill" si algo
+amerita ampliarse en `tool_mapping.md` o en los scripts.
+
+Antes de subirlo, pregúntale al usuario si quiere hacer `git add`/`commit`/
+`push` del caso — puede tener nombres de campo o detalles reales del negocio,
+y es su decisión si eso queda tal cual en el repo o prefiere resumirlo primero.
+
+Para detectar patrones entre muchos casos acumulados (qué herramienta sin
+soporte aparece más seguido, qué warning se repite — la base real para
+decidir qué mejorar primero):
+
+```bash
+python scripts/summarize_cases.py
+```
+
 ## Modos
 
 - `strict`: una herramienta no soportada o una macro custom detiene la conversión.
